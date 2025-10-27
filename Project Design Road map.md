@@ -110,7 +110,7 @@ Build a simple game engine with the following requirements:
 
 #### Engine Design
 - [ ] Design the engine to support any type of 3D game.
-- [ ] Use ECS (Entity-Component-System) architecture.
+- [x] Use ECS (Entity-Component-System) architecture.
 
 #### World and Entities
 - [ ] Implement World class to hold all entities.

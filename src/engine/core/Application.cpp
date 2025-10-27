@@ -1,4 +1,4 @@
-#include "core/Application.hpp"
+#include "Application.hpp"
 #include <stdexcept>
 
 Application::Application(Window& window) : m_window(&window) {}

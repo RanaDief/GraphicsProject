@@ -4,8 +4,8 @@
 #include <stdexcept>
 #include <glad/gl.h>
 
-#include "platform/Window.hpp"
-#include "core/MonoBehaviour.hpp"
+#include "../scripting/MonoBehaviour.hpp"
+#include "../platform/Window.hpp"
 
 class Application {
 

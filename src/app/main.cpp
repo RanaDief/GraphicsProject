@@ -1,6 +1,6 @@
 #include <iostream>
-#include "core/Application.hpp"
-#include "core/ShaderLoader.hpp"
+#include <engine/core/Application.hpp>
+#include <engine/gl/Shader.hpp>
 
 // Example user behaviour similar to Unity’s MonoBehaviour
 class MyGame : public MonoBehaviour {

@@ -1,4 +1,4 @@
-#include "platform/Window.hpp"
+#include "Window.hpp"
 #include <iostream>
 #include <stdexcept>
 

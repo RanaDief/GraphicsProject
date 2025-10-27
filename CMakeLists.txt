@@ -1,158 +1,154 @@
-cmake_minimum_required(VERSION 3.10) 
-project(OpenGLEngine VERSION 0.1.0) 
-# Define a name & a version for our project. 
-# This is unrelated to the executable that we will define later.
+cmake_minimum_required(VERSION 3.10)
+project(OpenGLEngine VERSION 0.1.0)
 
-# Tell CMake that we want to use C++20
+# ==========================================================
+# =================== C++ CONFIGURATION ====================
+# ==========================================================
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# ==========================================================
-# =============== GLFW CONFIGURATION OPTIONS ===============
-# ==========================================================
-# These options tell CMake not to build any of the extra stuff that comes with GLFW.
-set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)        # Don't build Documentation
-set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)       # Don't build Tests
-set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)    # Don't build Examples
-set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)           # Don't build Installation Information
-set(GLFW_USE_HYBRID_HPG ON CACHE BOOL "" FORCE)     # Use High Performance GPU if available
+option(ENGINE_BUILD_SHARED "Build Engine as a shared library instead of static" OFF)
+option(ENGINE_BUILD_EXAMPLES "Build example apps (src/app)" ON)
+option(ENGINE_ENABLE_TESTS "Enable building tests (tests/)" OFF)
 
-# This tells CMake to include GLFW’s CMake file into our project.
-# By doing so, the "glfw" target will be defined, and we can link it later.
+# ==========================================================
+# ================== GLFW CONFIGURATION ====================
+# ==========================================================
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+set(GLFW_USE_HYBRID_HPG ON CACHE BOOL "" FORCE)
+
+# ==========================================================
+# =================== THIRD-PARTY LIBS =====================
+# ==========================================================
+
+# ---------- GLFW ----------
 add_subdirectory(vendor/glfw EXCLUDE_FROM_ALL)
 
+# ---------- GLAD ----------
+# glad is typically just a single C file with headers; we compile it manually.
+set(GLAD_SOURCES ${CMAKE_SOURCE_DIR}/vendor/glad/src/gl.c)
+add_library(glad STATIC ${GLAD_SOURCES})
+target_include_directories(glad PUBLIC ${CMAKE_SOURCE_DIR}/vendor/glad/include)
+
+# ---------- GLM ----------
+# GLM is header-only, so no target needed, just add include dir.
+include_directories(${CMAKE_SOURCE_DIR}/vendor/glm)
+
+# ---------- stb ----------
+# stb is also header-only.
+include_directories(${CMAKE_SOURCE_DIR}/vendor/stb)
+
 # ==========================================================
-# ===================== OPENGL DETECTION ===================
+# =================== OPENGL DETECTION =====================
 # ==========================================================
-# This will automatically link the system's OpenGL library (e.g. libGL.so on Linux).
 find_package(OpenGL REQUIRED)
 
 # ==========================================================
-# ================== SOURCE FILE COLLECTION ================
+# =============== ENGINE SOURCE COLLECTION =================
 # ==========================================================
-# This command automatically collects all .cpp files from inside src/
-# so we don’t need to list them manually every time we add a new file.
-# The new ECS architecture files are included as well.
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
-    src/core/*.cpp
-    src/ecs/*.cpp
-    src/systems/*.cpp
-    src/components/*.cpp
-    src/assets/*.cpp
-    src/graphics/*.cpp
-    src/platform/*.cpp
-    # Note: do NOT include src/app/*.cpp here — app/main.cpp is compiled into the final executable only.
-)
-
-# Tip:
-# You could also use a simpler pattern:
-# file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS src/*/*.cpp)
-# This version is cleaner but might include unwanted folders (e.g. src/tests).
-
-# ==========================================================
-# =================== ENGINE LIBRARY CREATION ==============
-# ==========================================================
-# This creates a static library called "Engine" which contains all engine code.
-# The executable will later link against this library.
-add_library(Engine STATIC
-    ${ENGINE_SOURCES}
-    vendor/glad/src/gl.c
+    ${CMAKE_SOURCE_DIR}/src/engine/core/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/engine/ecs/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/engine/components/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/engine/assets/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/engine/gl/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/engine/platform/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/engine/scripting/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/engine/systems/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/engine/utils/*.cpp
 )
 
 # ==========================================================
-# ================== INCLUDE DIRECTORIES ===================
+# =============== ENGINE LIBRARY CREATION ==================
 # ==========================================================
-# This tells the compiler where to find the header files for GLFW, glad, stb, glm, and our source tree.
-# We set these as PUBLIC because consumers of the Engine library (like the OpenGLEngine executable)
-# need these include paths when compiling their translation units.
+if (ENGINE_BUILD_SHARED)
+    add_library(Engine SHARED ${ENGINE_SOURCES})
+else()
+    add_library(Engine STATIC ${ENGINE_SOURCES})
+endif()
+
 target_include_directories(Engine
     PUBLIC
-       ${CMAKE_SOURCE_DIR}/src        # so #include <Application.hpp> works
-       ${CMAKE_SOURCE_DIR}/src/ecs    # <-- Include ECS headers (EntityManager, ComponentManager, etc.)
-       ${CMAKE_SOURCE_DIR}/vendor/glfw/include
-       ${CMAKE_SOURCE_DIR}/vendor/glad/include
-       ${CMAKE_SOURCE_DIR}/vendor/stb
-       ${CMAKE_SOURCE_DIR}/vendor/glm
+        ${CMAKE_SOURCE_DIR}/src                     # internal headers
+        ${CMAKE_SOURCE_DIR}/src/include             # public engine.hpp
+        ${CMAKE_SOURCE_DIR}/vendor/glfw/include
+        ${CMAKE_SOURCE_DIR}/vendor/glad/include
+        ${CMAKE_SOURCE_DIR}/vendor/glm
+        ${CMAKE_SOURCE_DIR}/vendor/stb
 )
 
-# ==========================================================
-# ===================== LINK LIBRARIES =====================
-# ==========================================================
-# Link libraries needed by the engine (GLFW and system OpenGL).
-# Mark PUBLIC so anything that links Engine sees the link requirement if necessary.
 target_link_libraries(Engine
     PUBLIC
-       glfw
-       ${OPENGL_gl_LIBRARY}
+        glfw
+        glad
+        ${OPENGL_gl_LIBRARY}
+)
+
+target_compile_definitions(Engine PRIVATE
+    _CRT_SECURE_NO_WARNINGS
+    SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders"
+    ASSET_DIR="${CMAKE_SOURCE_DIR}/assets"
 )
 
 # ==========================================================
-# ================== COMPILER DEFINITIONS ==================
+# ============== COMPILER WARNINGS & PROPERTIES ============
 # ==========================================================
-# Compilers on Windows don't like the fopen function, so we disable those warnings.
-# Equivalent to "#define _CRT_SECURE_NO_WARNINGS" at the top of each file.
-target_compile_definitions(Engine PRIVATE _CRT_SECURE_NO_WARNINGS)
-
-# This defines a compile-time variable (macro) SHADER_DIR so the engine can find shaders at runtime.
-# It allows the engine to know where shaders are located, no matter where the program runs.
-# Use it in code as: std::string(SHADER_DIR) + "/main.vert"
-target_compile_definitions(Engine PRIVATE SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders")
-
-# could also define other asset directories if needed later (like TEXTURE_DIR, MODEL_DIR, etc.)
-# Example:
-# target_compile_definitions(Engine PRIVATE TEXTURE_DIR="${CMAKE_SOURCE_DIR}/assets/textures")
-
-# ==========================================================
-# ============== ENABLE USEFUL COMPILER WARNINGS ===========
-# ==========================================================
-# These warnings help catch subtle issues early during compilation.
 if (MSVC)
     target_compile_options(Engine PRIVATE /W4)
 else()
     target_compile_options(Engine PRIVATE -Wall -Wextra -pedantic)
 endif()
 
-# ==========================================================
-# ================== OUTPUT DIRECTORY SETUP ================
-# ==========================================================
-# This tells CMake where to place the final compiled executable.
-# Example: if you're building in "build/", the output will be "build/OpenGLEngine"
 set_target_properties(Engine PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-)
-
-# ==========================================================
-# ===================== IDE ORGANIZATION ===================
-# ==========================================================
-# This organizes files in IDEs (like CLion or Visual Studio) for easier navigation.
-# ECS, Components, and Systems will appear neatly under the “Source Files” group.
-source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/src PREFIX "Source Files" FILES ${ENGINE_SOURCES})
-
-# ----------------------------------------------------------
-# Create the final executable which only compiles the user app (main.cpp)
-# ----------------------------------------------------------
-# The executable is small; it links to the Engine library which has all the engine code.
-add_executable(OpenGLEngine
-    src/app/main.cpp
-)
-
-# Link the Engine library into the executable.
-target_link_libraries(OpenGLEngine PRIVATE Engine)
-
-# ==========================================================
-# ============= EXECUTABLE OUTPUT DIRECTORY ================
-# ==========================================================
-# This tells CMake where to place the final compiled executable.
-# Example: if you're building in "build/", the output will be "build/OpenGLEngine"
-set_target_properties(OpenGLEngine PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
 # ==========================================================
-# ===================== FUTURE EXTENSIONS ===================
+# ============== APPLICATION EXECUTABLE SETUP ==============
 # ==========================================================
-# If you later add:
-#  - src/editor/    -> tools for a scene editor (if we decide to make it)
-#  - src/tests/     -> unit tests using Catch2 or GoogleTest
-#  - src/physics/   -> physics components/systems   (will probably need it)
-# You can just add more GLOB_RECURSE patterns at the top to include them automatically.
+if (ENGINE_BUILD_EXAMPLES)
+    add_executable(OpenGLEngine
+        src/app/main.cpp
+    )
+
+    target_link_libraries(OpenGLEngine PRIVATE Engine)
+
+    set_target_properties(OpenGLEngine PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+
+    # Optional: copy shaders/assets into build directory
+    # add_custom_target(copy_assets ALL
+    #     COMMAND ${CMAKE_COMMAND} -E copy_directory
+    #     ${CMAKE_SOURCE_DIR}/assets ${CMAKE_BINARY_DIR}/assets
+    # )
+    # add_dependencies(OpenGLEngine copy_assets)
+endif()
+
+# ==========================================================
+# ================== UNIT TESTS (OPTIONAL) =================
+# ==========================================================
+if (ENGINE_ENABLE_TESTS)
+    enable_testing()
+
+    file(GLOB TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tests/*.cpp)
+    add_executable(EngineTests ${TEST_SOURCES})
+    target_link_libraries(EngineTests PRIVATE Engine)
+    add_test(NAME EngineTests COMMAND EngineTests)
+endif()
+
+
+# ==========================================================
+# ================= Extra helpful CMake hints ==============
+# ==========================================================
+# - If the engine gets large, consider splitting src/engine into its own CMake subdirectory
+#   (add_subdirectory(src/engine)), with a small src/engine/CMakeLists.txt that lists implementation files.
+# - Consider exporting a CMake config file so other projects can use find_package(OpenGLEngine).
+# - If you want to support editor-only code, put it under src/editor and do NOT include it into ENGINE_SOURCES.
+#
+# End of CMakeLists.txt
